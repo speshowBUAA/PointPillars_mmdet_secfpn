@@ -41,6 +41,12 @@
 * @date 2021/04/30
 */
 
+/**
+* @author Ye xiubo
+* Contact:github.com/speshowBUAA
+* @date 2022/01/05
+*/
+
 #pragma once
 #include <memory>
 #include <vector>
@@ -73,8 +79,7 @@ class PostprocessCuda {
    * @param[in] float_min The lowest float value
    * @param[in] float_max The maximum float value
    * @param[in] num_class Number of classes 
-   * @param[in] num_anchor_per_cls Number anchor per category
-   * @param[in] multihead_label_mapping 
+   * @param[in] num_per_cls Number of category
    * @param[in] score_threshold Score threshold for filtering output
    * @param[in] nms_overlap_threshold IOU threshold for NMS
    * @param[in] nms_pre_maxsize Maximum number of boxes into NMS
@@ -87,7 +92,6 @@ class PostprocessCuda {
   PostprocessCuda(const int num_threads, 
                   const float float_min, const float float_max,
                   const int num_class, const int num_anchor_per_cls, 
-                  const std::vector<std::vector<int>> multihead_label_mapping,
                   const float score_threshold,  
                   const float nms_overlap_threshold, 
                   const int nms_pre_maxsize, 

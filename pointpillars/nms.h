@@ -32,6 +32,11 @@ All Rights Reserved 2019-2020.
 * @date 2021/04/30
 */
 
+/**
+* @author Ye xiubo
+* Contact:github.com/speshowBUAA
+* @date 2022/01/05
+*/
 
 class NmsCuda {
  private:

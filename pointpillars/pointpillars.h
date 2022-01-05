@@ -41,6 +41,11 @@
 * @date 2021/04/30
 */
 
+/**
+* @author Ye xiubo
+* Contact:github.com/speshowBUAA
+* @date 2022/01/05
+*/
 
 #pragma once
 
@@ -139,15 +144,10 @@ class PointPillars {
     int kGridXSize;
     int kGridYSize;
     int kGridZSize;
-    int kNumAnchorXinds;
-    int kNumAnchorYinds;
     int kRpnInputSize;
     int kNumAnchor;
     int kNumInputBoxFeature;
     int kNumOutputBoxFeature;
-    int kRpnBoxOutputSize;
-    int kRpnClsOutputSize;
-    int kRpnDirOutputSize;
     int kBatchSize;
     int kNumIndsForScan;
     int kNumThreads;
@@ -156,16 +156,7 @@ class PointPillars {
     int kNumBoxCorners;
     int kNmsPreMaxsize;
     int kNmsPostMaxsize;
-    //params for initialize anchors
-    //Adapt to OpenPCDet
-    int kAnchorStrides;
-    std::vector<string> kAnchorNames;
-    std::vector<float> kAnchorDxSizes;
-    std::vector<float> kAnchorDySizes;
-    std::vector<float> kAnchorDzSizes;
-    std::vector<float> kAnchorBottom;
-    std::vector<std::vector<int>> kMultiheadLabelMapping;
-    int kNumAnchorPerCls;
+
     int host_pillar_count_[1];
 
     int* dev_x_coors_;
@@ -181,25 +172,13 @@ class PointPillars {
 
     float* dev_pfe_gather_feature_;
     void* pfe_buffers_[2];
-    //variable for doPostprocessCudaMultiHead
-    void* rpn_buffers_[8];
-    void* mmdet3d_rpn_buffers_[4];
-
-    std::vector<float*> rpn_box_output_; 
-    std::vector<float*> rpn_cls_output_;
+    void* rpn_buffers_[4];
 
     float* dev_scattered_feature_;
 
     float* host_box_;
     float* host_score_;
     int*   host_filtered_count_;
-
-    // float* dev_filtered_box_;
-    // float* dev_filtered_score_;
-    // int*   dev_filtered_label_;
-    // int*   dev_filtered_dir_;
-    // float* dev_box_for_nms_;
-    // int*   dev_filter_count_;
 
     std::unique_ptr<PreprocessPointsCuda> preprocess_points_cuda_ptr_;
     std::unique_ptr<ScatterCuda> scatter_cuda_ptr_;

@@ -9,9 +9,9 @@ BackboneOnnx: /home/jz/yxb/PointPillars_MultiHead_40FPS/model/mmdet/pts_backbone
 PfeTrt: /home/jz/yxb/PointPillars_MultiHead_40FPS/model/mmdet/pts_pfe.trt
 BackboneTrt: /home/jz/yxb/PointPillars_MultiHead_40FPS/model/mmdet/pts_backbone_with_anchors.trt
 
-ModelConfig: ../pointpillars/cfgs/cbgs_pp_multihead.yaml
+ModelConfig: ../pointpillars/cfgs/hv_pointpillars_secfpn_sbn-all_4x8_2x_nus-3d.yaml
 AnchorFile: ../pointpillars/cfgs/generate_anchors.txt
 
 InputFile: ../test/testdata/1606813517797756000.bin
 # OutputFile: ../test/testdata/boxes_onnx.txt
-OutputFile: ../test/testdata/boxes_gt.txt
+OutputFile: ../test/testdata/boxes.txt

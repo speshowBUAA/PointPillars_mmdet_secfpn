@@ -41,14 +41,17 @@
 * @date 2021/04/30
 */
 
-
+/**
+* @author Ye xiubo
+* Contact:github.com/speshowBUAA
+* @date 2022/01/05
+*/
 #include "pointpillars.h"
 
 #include <chrono>
 #include <iostream>
 #include <iostream>
 
-#define NUM 1000
 #define ANCHOR_NUM 560000
 void PointPillars::InitParams()
 {
@@ -74,45 +77,14 @@ void PointPillars::InitParams()
     kNumIndsForScan = 1024;
     kNumThreads = 64;
     kNumBoxCorners = 8;
-    kAnchorStrides = 4;
     kNmsPreMaxsize = params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_PRE_MAXSIZE"].as<int>();
     kNmsPostMaxsize = params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_POST_MAXSIZE"].as<int>();
-    //params for initialize anchors
-    //Adapt to OpenPCDet
-    kAnchorNames = params["CLASS_NAMES"].as<std::vector<std::string>>();
-    for (int i = 0; i < kAnchorNames.size(); ++i)
-    {
-        kAnchorDxSizes.emplace_back(params["MODEL"]["DENSE_HEAD"]["ANCHOR_GENERATOR_CONFIG"][i]["anchor_sizes"][0][0].as<float>());
-        kAnchorDySizes.emplace_back(params["MODEL"]["DENSE_HEAD"]["ANCHOR_GENERATOR_CONFIG"][i]["anchor_sizes"][0][1].as<float>());
-        kAnchorDzSizes.emplace_back(params["MODEL"]["DENSE_HEAD"]["ANCHOR_GENERATOR_CONFIG"][i]["anchor_sizes"][0][2].as<float>());
-        kAnchorBottom.emplace_back(params["MODEL"]["DENSE_HEAD"]["ANCHOR_GENERATOR_CONFIG"][i]["anchor_bottom_heights"][0].as<float>());
-    }
-    for (int idx_head = 0; idx_head < params["MODEL"]["DENSE_HEAD"]["RPN_HEAD_CFGS"].size(); ++idx_head)
-    {
-        int num_cls_per_head = params["MODEL"]["DENSE_HEAD"]["RPN_HEAD_CFGS"][idx_head]["HEAD_CLS_NAME"].size();
-        std::vector<int> value;
-        for (int i = 0; i < num_cls_per_head; ++i)
-        {
-            value.emplace_back(idx_head + i);
-        }
-        kMultiheadLabelMapping.emplace_back(value);
-    }
 
     // Generate secondary parameters based on above.
-    kGridXSize = static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize); //512
-    kGridYSize = static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize); //512
+    kGridXSize = static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize); //400
+    kGridYSize = static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize); //400
     kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize); //1
     kRpnInputSize = 64 * kGridYSize * kGridXSize;
-    std::cout << "kGridXSize :" << kGridXSize << std::endl;
-    std::cout << "kGridYSize :" << kGridYSize << std::endl;
-    kNumAnchorXinds = static_cast<int>(kGridXSize / kAnchorStrides); //Width
-    kNumAnchorYinds = static_cast<int>(kGridYSize / kAnchorStrides); //Hight
-    kNumAnchor = kNumAnchorXinds * kNumAnchorYinds * 2 * kNumClass;  // H * W * Ro * N = 196608
-
-    kNumAnchorPerCls = kNumAnchorXinds * kNumAnchorYinds * 2; //H * W * Ro = 32768
-    kRpnBoxOutputSize = kNumAnchor * kNumOutputBoxFeature;
-    kRpnClsOutputSize = kNumAnchor * kNumClass;
-    kRpnDirOutputSize = kNumAnchor * 2;
 }
 
 
@@ -150,8 +122,7 @@ PointPillars::PointPillars(const float score_threshold,
     postprocess_cuda_ptr_.reset(
       new PostprocessCuda(kNumThreads,
                           float_min, float_max, 
-                          kNumClass,NUM,
-                          kMultiheadLabelMapping,
+                          kNumClass,kNmsPreMaxsize,
                           score_threshold_, 
                           nms_overlap_threshold_,
                           kNmsPreMaxsize, 
@@ -186,28 +157,18 @@ void PointPillars::DeviceMemoryMalloc() {
                                         kNumGatherPointFeature * sizeof(float)));
     GPU_CHECK(cudaMalloc(&pfe_buffers_[1], kMaxNumPillars * 64 * sizeof(float)));
 
-    GPU_CHECK(cudaMalloc(&mmdet3d_rpn_buffers_[0],  (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&mmdet3d_rpn_buffers_[3],  NUM * 9 * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&mmdet3d_rpn_buffers_[1],  NUM * 10 * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&mmdet3d_rpn_buffers_[2],  NUM * sizeof(int)));
-
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[0],  kRpnInputSize * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[1],  kNumAnchorPerCls  * sizeof(float)));  //classes
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[2],  kNumAnchorPerCls  * 2 * 2 * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[3],  kNumAnchorPerCls  * 2 * 2 * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[4],  kNumAnchorPerCls  * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[5],  kNumAnchorPerCls  * 2 * 2 * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[6],  kNumAnchorPerCls  * 2 * 2 * sizeof(float)));
-    
-    GPU_CHECK(cudaMalloc(&rpn_buffers_[7],  kNumAnchorPerCls * kNumClass * kNumOutputBoxFeature * sizeof(float))); //boxes
+    GPU_CHECK(cudaMalloc(&rpn_buffers_[0],  (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
+    GPU_CHECK(cudaMalloc(&rpn_buffers_[3],  kNmsPreMaxsize * 9 * sizeof(float)));
+    GPU_CHECK(cudaMalloc(&rpn_buffers_[1],  kNmsPreMaxsize * 10 * sizeof(float)));
+    GPU_CHECK(cudaMalloc(&rpn_buffers_[2],  kNmsPreMaxsize * sizeof(int)));
 
     // for scatter kernel
     GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_scattered_feature_),
                         kNumThreads * kGridYSize * kGridXSize * sizeof(float)));
 
     // for filter
-    host_box_ =  new float[NUM * kNumClass * kNumOutputBoxFeature]();
-    host_score_ =  new float[NUM * kNumClass * 18]();
+    host_box_ =  new float[kNmsPreMaxsize * kNumClass * kNumOutputBoxFeature]();
+    host_score_ =  new float[kNmsPreMaxsize * kNumClass * 18]();
     host_filtered_count_ = new int[kNumClass]();
 }
 
@@ -229,19 +190,11 @@ PointPillars::~PointPillars() {
     GPU_CHECK(cudaFree(pfe_buffers_[0]));
     GPU_CHECK(cudaFree(pfe_buffers_[1]));
 
-    GPU_CHECK(cudaFree(mmdet3d_rpn_buffers_[0]));
-    GPU_CHECK(cudaFree(mmdet3d_rpn_buffers_[1]));
-    GPU_CHECK(cudaFree(mmdet3d_rpn_buffers_[2]));
-    GPU_CHECK(cudaFree(mmdet3d_rpn_buffers_[3]));
-
     GPU_CHECK(cudaFree(rpn_buffers_[0]));
     GPU_CHECK(cudaFree(rpn_buffers_[1]));
     GPU_CHECK(cudaFree(rpn_buffers_[2]));
     GPU_CHECK(cudaFree(rpn_buffers_[3]));
-    GPU_CHECK(cudaFree(rpn_buffers_[4]));
-    GPU_CHECK(cudaFree(rpn_buffers_[5]));
-    GPU_CHECK(cudaFree(rpn_buffers_[6]));
-    GPU_CHECK(cudaFree(rpn_buffers_[7]));
+
     pfe_context_->destroy();
     backbone_context_->destroy();
     pfe_engine_->destroy();
@@ -268,10 +221,10 @@ void PointPillars::SetDeviceMemoryToZero() {
     GPU_CHECK(cudaMemset(dev_pfe_gather_feature_,    0, kMaxNumPillars * kMaxNumPointsPerPillar * kNumGatherPointFeature * sizeof(float)));
     GPU_CHECK(cudaMemset(pfe_buffers_[0],       0, kMaxNumPillars * kMaxNumPointsPerPillar * kNumGatherPointFeature * sizeof(float)));
     GPU_CHECK(cudaMemset(pfe_buffers_[1],       0, kMaxNumPillars * 64 * sizeof(float)));
-    GPU_CHECK(cudaMemset(mmdet3d_rpn_buffers_[0],       0, (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
-    GPU_CHECK(cudaMemset(mmdet3d_rpn_buffers_[3],       0, NUM * 9 * sizeof(float)));
-    GPU_CHECK(cudaMemset(mmdet3d_rpn_buffers_[1],       0, NUM * 10 * sizeof(float)));
-    GPU_CHECK(cudaMemset(mmdet3d_rpn_buffers_[2],       0, NUM * sizeof(int)));
+    GPU_CHECK(cudaMemset(rpn_buffers_[0],       0, (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
+    GPU_CHECK(cudaMemset(rpn_buffers_[3],       0, kNmsPreMaxsize * 9 * sizeof(float)));
+    GPU_CHECK(cudaMemset(rpn_buffers_[1],       0, kNmsPreMaxsize * 10 * sizeof(float)));
+    GPU_CHECK(cudaMemset(rpn_buffers_[2],       0, kNmsPreMaxsize * sizeof(int)));
     GPU_CHECK(cudaMemset(dev_scattered_feature_,    0, kNumThreads * kGridYSize * kGridXSize * sizeof(float)));
 }
 
@@ -448,21 +401,21 @@ void PointPillars::DoInference(const float* in_points_array,
 
     // [STEP 5] : backbone forward
     auto backbone_start = std::chrono::high_resolution_clock::now();
-    GPU_CHECK(cudaMemcpyAsync(mmdet3d_rpn_buffers_[0], dev_scattered_feature_,
+    GPU_CHECK(cudaMemcpyAsync(rpn_buffers_[0], dev_scattered_feature_,
                             kBatchSize * kRpnInputSize * sizeof(float),
                             cudaMemcpyDeviceToDevice, stream));
-    GPU_CHECK(cudaMemcpyAsync((uint8_t *)mmdet3d_rpn_buffers_[0] + kBatchSize * kRpnInputSize * sizeof(float), dev_anchors,
+    GPU_CHECK(cudaMemcpyAsync((uint8_t *)rpn_buffers_[0] + kBatchSize * kRpnInputSize * sizeof(float), dev_anchors,
                             ANCHOR_NUM * kNumAnchorSize * sizeof(float),
                             cudaMemcpyDeviceToDevice, stream));
-    backbone_context_->enqueueV2(mmdet3d_rpn_buffers_, stream, nullptr);
+    backbone_context_->enqueueV2(rpn_buffers_, stream, nullptr);
     cudaDeviceSynchronize();
     auto backbone_end = std::chrono::high_resolution_clock::now();
 
     // [STEP 6]: postprocess (multihead)
     auto postprocess_start = std::chrono::high_resolution_clock::now();
     postprocess_cuda_ptr_->DoPostprocessCuda(
-        reinterpret_cast<float*>(mmdet3d_rpn_buffers_[3]), // [box]
-        reinterpret_cast<float*>(mmdet3d_rpn_buffers_[1]), // [score]
+        reinterpret_cast<float*>(rpn_buffers_[3]), // [box]
+        reinterpret_cast<float*>(rpn_buffers_[1]), // [score]
         host_box_, 
         host_score_, 
         host_filtered_count_,
