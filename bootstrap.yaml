@@ -1,0 +1,17 @@
+BoxFeature: 7
+ScoreThreshold: 0.1
+NmsOverlapThreshold: 0.2
+UseOnnx: False 
+
+PfeOnnx: /home/jz/yxb/PointPillars_MultiHead_40FPS/model/mmdet/pts_pfe.onnx
+BackboneOnnx: /home/jz/yxb/PointPillars_MultiHead_40FPS/model/mmdet/pts_backbone_with_anchors.onnx
+
+PfeTrt: /home/jz/yxb/PointPillars_MultiHead_40FPS/model/mmdet/pts_pfe.trt
+BackboneTrt: /home/jz/yxb/PointPillars_MultiHead_40FPS/model/mmdet/pts_backbone_with_anchors.trt
+
+ModelConfig: ../pointpillars/cfgs/cbgs_pp_multihead.yaml
+AnchorFile: ../pointpillars/cfgs/generate_anchors.txt
+
+InputFile: ../test/testdata/1606813517797756000.bin
+# OutputFile: ../test/testdata/boxes_onnx.txt
+OutputFile: ../test/testdata/boxes_gt.txt
