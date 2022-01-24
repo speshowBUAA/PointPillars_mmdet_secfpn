@@ -24,6 +24,8 @@ def dataloader(cloud_path , boxes_path):
     # cloud = np.loadtxt(cloud_path).reshape(-1,5)
     cloud = np.fromfile(cloud_path, dtype=np.float32, count=-1).reshape([-1, 5])[:, :4]
     boxes = np.loadtxt(boxes_path).reshape(-1,7)
+    # cloud = np.fromfile(cloud_path, dtype=np.float32, count=-1).reshape([-1,4])
+    # boxes = np.loadtxt(boxes_path).reshape(-1,9)[:, :7]
     return cloud , boxes 
 
 def main():
@@ -39,16 +41,16 @@ def test():
     # print(cloud.shape)
     # draw_clouds(cloud)
 
-    path = "../test/testdata/np_raw_feats.npy"
-    cloud = np.load(path).reshape(-1, 10)
+    # path = "../test/testdata/np_raw_feats.npy"
+    # cloud = np.load(path).reshape(-1, 10)
     # cloud = cloud [:, :4]
-    print(cloud.shape)
-    print(np.max(cloud, axis=0))
+    # print(cloud.shape)
+    # print(np.max(cloud, axis=0))
     # draw_clouds(cloud)
 
-    path = "../test/testdata/0_Model_pfe_input_gather_feature.txt"
-    cloud = np.loadtxt(path).reshape(-1, 10)
-    print(np.max(cloud, axis=0))
+    # path = "../test/testdata/0_Model_pfe_input_gather_feature.txt"
+    # cloud = np.loadtxt(path).reshape(-1, 10)
+    # print(np.max(cloud, axis=0))
     # cloud = cloud [:, :4]
     # print(cloud.shape)
     # print(np.max(cloud, axis=0))
@@ -69,8 +71,16 @@ def test():
 
     # path = "../test/testdata/1606813517797756000.bin"
     # cloud = np.fromfile(path, dtype=np.float32, count=-1).reshape([-1, 5])[:, :4]
-    # print(cloud.shape)
+    # cloud_out = cloud.reshape(-1)
+    # cloud_out.tofile('1606813517797756000_dim4.bin')
+    # print(cloud_out.shape)
     # draw_clouds(cloud)
+
+    path = "../test/testdata/pts.bin"
+    cloud = np.fromfile(path, dtype=np.float32, count=-1)
+    cloud = cloud.reshape([-1,4])
+    print(cloud.shape)
+    draw_clouds(cloud)
 
 if __name__ == "__main__":
     main()

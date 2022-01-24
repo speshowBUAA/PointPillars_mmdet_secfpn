@@ -72,7 +72,7 @@ class PreprocessPointsCuda {
 
     float* dev_pillar_point_feature_in_coors_;
     int* dev_pillar_count_histo_;
-
+    int* coor_to_voxelidx_;
     int* dev_counter_;
     int* dev_pillar_count_;
     float* dev_points_mean_;
@@ -131,6 +131,7 @@ class PreprocessPointsCuda {
    */
   void DoPreprocessPointsCuda(const float* dev_points,
                               const int in_num_points,
+                              const int* dev_coor_to_voxelidx,
                               int* dev_x_coors,
                               int* dev_y_coors,
                               float* dev_num_points_per_pillar,

@@ -50,9 +50,10 @@
 
 #include <chrono>
 #include <iostream>
-#include <iostream>
+#include <cstring>
 
-#define ANCHOR_NUM 560000
+// #define ANCHOR_NUM 560000   // feature_map 400x400
+#define ANCHOR_NUM 140000   // feature_map 200x200
 void PointPillars::InitParams()
 {
     YAML::Node params = YAML::LoadFile(pp_config_);
@@ -81,10 +82,12 @@ void PointPillars::InitParams()
     kNmsPostMaxsize = params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_POST_MAXSIZE"].as<int>();
 
     // Generate secondary parameters based on above.
-    kGridXSize = static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize); //400
-    kGridYSize = static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize); //400
+    kGridXSize = static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize); //400 200
+    kGridYSize = static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize); //400 200
     kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize); //1
-    kRpnInputSize = 64 * kGridYSize * kGridXSize;
+    std::cout << "kGridXSize: " << kGridXSize << std::endl;
+    std::cout << "kGridYSize: " << kGridYSize << std::endl;
+    kRpnInputSize = 22 * kGridYSize * kGridXSize;
 }
 
 
@@ -155,7 +158,7 @@ void PointPillars::DeviceMemoryMalloc() {
     GPU_CHECK(
         cudaMalloc(&pfe_buffers_[0], kMaxNumPillars * kMaxNumPointsPerPillar *
                                         kNumGatherPointFeature * sizeof(float)));
-    GPU_CHECK(cudaMalloc(&pfe_buffers_[1], kMaxNumPillars * 64 * sizeof(float)));
+    GPU_CHECK(cudaMalloc(&pfe_buffers_[1], kMaxNumPillars * 22 * sizeof(float)));
 
     GPU_CHECK(cudaMalloc(&rpn_buffers_[0],  (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
     GPU_CHECK(cudaMalloc(&rpn_buffers_[3],  kNmsPreMaxsize * 9 * sizeof(float)));
@@ -165,6 +168,9 @@ void PointPillars::DeviceMemoryMalloc() {
     // for scatter kernel
     GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_scattered_feature_),
                         kNumThreads * kGridYSize * kGridXSize * sizeof(float)));
+
+    // for coor_to_voxelidx
+    coor_to_voxelidx = (int *)malloc(kGridYSize * kGridXSize * sizeof(int));
 
     // for filter
     host_box_ =  new float[kNmsPreMaxsize * kNumClass * kNumOutputBoxFeature]();
@@ -195,6 +201,9 @@ PointPillars::~PointPillars() {
     GPU_CHECK(cudaFree(rpn_buffers_[2]));
     GPU_CHECK(cudaFree(rpn_buffers_[3]));
 
+    // for coor_to_voxelidx
+    free(coor_to_voxelidx);
+
     pfe_context_->destroy();
     backbone_context_->destroy();
     pfe_engine_->destroy();
@@ -210,6 +219,8 @@ PointPillars::~PointPillars() {
 
 
 void PointPillars::SetDeviceMemoryToZero() {
+    voxel_num_ = 0;
+    memset(coor_to_voxelidx, -1, kGridYSize * kGridXSize * sizeof(int));
 
     GPU_CHECK(cudaMemset(dev_num_points_per_pillar_, 0, kMaxNumPillars * sizeof(float)));
     GPU_CHECK(cudaMemset(dev_x_coors_,               0, kMaxNumPillars * sizeof(int)));
@@ -220,7 +231,7 @@ void PointPillars::SetDeviceMemoryToZero() {
 
     GPU_CHECK(cudaMemset(dev_pfe_gather_feature_,    0, kMaxNumPillars * kMaxNumPointsPerPillar * kNumGatherPointFeature * sizeof(float)));
     GPU_CHECK(cudaMemset(pfe_buffers_[0],       0, kMaxNumPillars * kMaxNumPointsPerPillar * kNumGatherPointFeature * sizeof(float)));
-    GPU_CHECK(cudaMemset(pfe_buffers_[1],       0, kMaxNumPillars * 64 * sizeof(float)));
+    GPU_CHECK(cudaMemset(pfe_buffers_[1],       0, kMaxNumPillars * 22 * sizeof(float)));
     GPU_CHECK(cudaMemset(rpn_buffers_[0],       0, (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
     GPU_CHECK(cudaMemset(rpn_buffers_[3],       0, kNmsPreMaxsize * 9 * sizeof(float)));
     GPU_CHECK(cudaMemset(rpn_buffers_[1],       0, kNmsPreMaxsize * 10 * sizeof(float)));
@@ -251,7 +262,6 @@ void PointPillars::InitTRT(const bool use_onnx) {
     if (pfe_context_ == nullptr || backbone_context_ == nullptr) {
         std::cerr << "Failed to create TensorRT Execution Context.";
     }
-  
 }
 
 void PointPillars::OnnxToTRTModel(
@@ -347,7 +357,23 @@ void PointPillars::DoInference(const float* in_points_array,
 {
     SetDeviceMemoryToZero();
     cudaDeviceSynchronize();
+
     // [STEP 1] : load pointcloud and anchors
+    auto load_start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < in_num_points; ++i) {
+      int x_coor = floor((in_points_array[i * kNumPointFeature + 0] - kMinXRange) / kPillarXSize);
+      int y_coor = floor((in_points_array[i * kNumPointFeature + 1] - kMinYRange) / kPillarYSize);
+      int z_coor = floor((in_points_array[i * kNumPointFeature + 2] - kMinZRange) / kPillarZSize);
+      if (x_coor >= 0 && x_coor < kGridXSize && y_coor >= 0 && y_coor < kGridYSize && z_coor >= 0 && z_coor < kGridZSize) 
+      {
+        if (coor_to_voxelidx[y_coor * kGridXSize + x_coor] == -1)
+        {
+          voxel_num_++;
+          coor_to_voxelidx[y_coor * kGridXSize + x_coor] = voxel_num_ - 1;
+        }
+      }
+    }
+
     float* dev_points;
     GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_points),
                         in_num_points * kNumPointFeature * sizeof(float))); // in_num_points , kNumPointFeature
@@ -364,19 +390,28 @@ void PointPillars::DoInference(const float* in_points_array,
                         ANCHOR_NUM * kNumAnchorSize * sizeof(float),
                         cudaMemcpyHostToDevice));
 
+    int* dev_coor_to_voxelidx;
+    GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_coor_to_voxelidx),
+                        kGridYSize * kGridXSize * sizeof(int))); // in_num_points , kNumPointFeature
+    GPU_CHECK(cudaMemset(dev_coor_to_voxelidx, 0, kGridYSize * kGridXSize * sizeof(int)));
+    GPU_CHECK(cudaMemcpy(dev_coor_to_voxelidx, coor_to_voxelidx,
+                        kGridYSize * kGridXSize * sizeof(int),
+                        cudaMemcpyHostToDevice));
+    auto load_end = std::chrono::high_resolution_clock::now();
+
     // [STEP 2] : preprocess
-    host_pillar_count_[0] = 0;
     auto preprocess_start = std::chrono::high_resolution_clock::now();
+    host_pillar_count_[0] = 0;
     preprocess_points_cuda_ptr_->DoPreprocessPointsCuda(
-          dev_points, in_num_points, dev_x_coors_, dev_y_coors_,
+          dev_points, in_num_points, dev_coor_to_voxelidx, dev_x_coors_, dev_y_coors_,
           dev_num_points_per_pillar_, dev_pillar_point_feature_, dev_pillar_coors_,
           dev_sparse_pillar_map_, host_pillar_count_ ,
           dev_pfe_gather_feature_ );
     cudaDeviceSynchronize();
-    // DEVICE_SAVE<float>(dev_pfe_gather_feature_,  5000 * 64 * 10 * sizeof(float), "0_dev_pfe_gather_feature");
-
     auto preprocess_end = std::chrono::high_resolution_clock::now();
     // DEVICE_SAVE<float>(dev_pfe_gather_feature_,  kMaxNumPillars * kMaxNumPointsPerPillar * kNumGatherPointFeature  , "0_Model_pfe_input_gather_feature");
+    // DEVICE_SAVE<int>(dev_x_coors_,  kMaxNumPillars , "0_dev_x_coors_");
+    // DEVICE_SAVE<int>(dev_y_coors_,  kMaxNumPillars , "0_dev_y_coors_");
 
     // [STEP 3] : pfe forward
     cudaStream_t stream;
@@ -388,7 +423,7 @@ void PointPillars::DoInference(const float* in_points_array,
     pfe_context_->enqueueV2(pfe_buffers_, stream, nullptr);
     cudaDeviceSynchronize();
     auto pfe_end = std::chrono::high_resolution_clock::now();
-    // DEVICE_SAVE<float>(reinterpret_cast<float*>(pfe_buffers_[1]),  kMaxNumPillars * 64 , "1_Model_pfe_output_buffers_[1]");
+    // DEVICE_SAVE<float>(reinterpret_cast<float*>(pfe_buffers_[1]),  kMaxNumPillars * 22 , "1_Model_pfe_output_buffers_[1]");
 
     // [STEP 4] : scatter pillar feature
     auto scatter_start = std::chrono::high_resolution_clock::now();
@@ -396,7 +431,7 @@ void PointPillars::DoInference(const float* in_points_array,
         host_pillar_count_[0], dev_x_coors_, dev_y_coors_,
         reinterpret_cast<float*>(pfe_buffers_[1]), dev_scattered_feature_);
     cudaDeviceSynchronize();
-    auto scatter_end = std::chrono::high_resolution_clock::now();   
+    auto scatter_end = std::chrono::high_resolution_clock::now();
     // DEVICE_SAVE<float>(dev_scattered_feature_ ,  kRpnInputSize,"2_Model_backbone_input_dev_scattered_feature");
 
     // [STEP 5] : backbone forward
@@ -424,6 +459,7 @@ void PointPillars::DoInference(const float* in_points_array,
     auto postprocess_end = std::chrono::high_resolution_clock::now();
 
     // release the stream and the buffers
+    std::chrono::duration<double> load_cost = load_end - load_start;
     std::chrono::duration<double> preprocess_cost = preprocess_end - preprocess_start;
     std::chrono::duration<double> pfe_cost = pfe_end - pfe_start;
     std::chrono::duration<double> scatter_cost = scatter_end - scatter_start;
@@ -434,10 +470,10 @@ void PointPillars::DoInference(const float* in_points_array,
     std::cout << "------------------------------------" << std::endl;
     std::cout << setiosflags(ios::left)  << setw(14) << "Module" << setw(12)  << "Time"  << resetiosflags(ios::left) << std::endl;
     std::cout << "------------------------------------" << std::endl;
-    std::string Modules[] = {"Preprocess" , "Pfe" , "Scatter" , "Backbone" , "Postprocess" , "Summary"};
-    double Times[] = {preprocess_cost.count() , pfe_cost.count() , scatter_cost.count() , backbone_cost.count() , postprocess_cost.count() , pointpillars_cost.count()}; 
+    std::string Modules[] = {"Load", "Preprocess" , "Pfe" , "Scatter" , "Backbone" , "Postprocess" , "Summary"};
+    double Times[] = {load_cost.count() , preprocess_cost.count() , pfe_cost.count() , scatter_cost.count() , backbone_cost.count() , postprocess_cost.count() , pointpillars_cost.count()}; 
 
-    for (int i =0 ; i < 6 ; ++i) {
+    for (int i =0 ; i < 7 ; ++i) {
         std::cout << setiosflags(ios::left) << setw(14) << Modules[i]  << setw(8)  << Times[i] * 1000 << " ms" << resetiosflags(ios::left) << std::endl;
     }
     std::cout << "------------------------------------" << std::endl;

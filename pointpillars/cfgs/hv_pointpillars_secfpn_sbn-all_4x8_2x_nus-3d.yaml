@@ -6,7 +6,8 @@ DATA_CONFIG:
     _BASE_CONFIG_: cfgs/dataset_configs/nuscenes_dataset.yaml
 
     # POINT_CLOUD_RANGE: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
-    POINT_CLOUD_RANGE: [-50, -50, -5.0, 50, 50, 3.0]
+    # POINT_CLOUD_RANGE: [-50, -50, -5.0, 50, 50, 3.0]
+    POINT_CLOUD_RANGE: [-25, -25, -5.0, 25, 25, 3.0]
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
             REMOVE_OUTSIDE_BOXES: True

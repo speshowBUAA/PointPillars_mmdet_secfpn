@@ -81,11 +81,15 @@ __global__ void make_pillar_histo_kernel(
           y_coor * grid_x_size * max_points_per_pillar * num_point_feature +
           x_coor * max_points_per_pillar * num_point_feature +
           count * num_point_feature;
- 
+      // int pillar_ind = coor_to_voxelidx[y_coor * grid_x_size + x_coor] * max_points_per_pillar * num_point_feature + count * num_point_feature;
       for (int i = 0; i < num_point_feature; ++i) {
         dev_pillar_point_feature_in_coors[ind + i] =
             dev_points[th_i * num_point_feature + i];
       }
+      // for (int i = 0; i < num_point_feature; ++i) {
+      //   dev_pillar_point_feature_in_coors[pillar_ind + i] =
+      //       dev_points[th_i * num_point_feature + i];
+      // }
     }
   }
 }
@@ -239,7 +243,7 @@ __global__ void make_pillar_mean_kernel(
     // conflicts
     warpReduce(temp , ith_point , axis);
 
-	// // write result for this block to global mem
+  // // write result for this block to global mem
     if (ith_point == 0)
     dev_points_mean[ith_pillar * blockDim.y + axis] = temp[ith_point * blockDim.y + axis] / num_points_at_this_pillar ;
 }
@@ -249,13 +253,13 @@ __global__ void make_pillar_mean_kernel(
 // dev_pillar_coors 过滤后点云对应的坐标
 // dev_pfe_gather_feature_ 加入全部点云中心3维坐标特征 再加全部体素中心3维坐标
 __global__ void gather_point_feature_kernel(
-  const int max_num_pillars_,const int max_num_points_per_pillar,const int num_point_feature,
+  const int* dev_coor_to_voxelidx,const int max_num_pillars_,const int max_num_points_per_pillar,const int num_point_feature,
   const float min_x_range, const float min_y_range, const float min_z_range, 
-  const float pillar_x_size,  const float pillar_y_size, const float pillar_z_size,
+  const float pillar_x_size,  const float pillar_y_size, const float pillar_z_size, const int grid_x_size,
   const float* dev_pillar_point_feature, const float* dev_num_points_per_pillar, 
   const float* dev_pillar_coors,
   float* dev_points_mean, 
-  float* dev_pfe_gather_feature_){
+  float* dev_pfe_gather_feature_, int* dev_x_coors, int* dev_y_coors){
 
   int ith_pillar = blockIdx.x; 
   int ith_point = threadIdx.x;
@@ -267,50 +271,52 @@ __global__ void gather_point_feature_kernel(
   if (ith_point >= num_points_at_this_pillar){
         return;
     }
+    
+    int x_coor = floor((dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 0] - min_x_range) / pillar_x_size);
+    int y_coor = floor((dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 1] - min_y_range) / pillar_y_size);
+    int pillar_ind = dev_coor_to_voxelidx[y_coor * grid_x_size + x_coor];
+    dev_x_coors[pillar_ind] = x_coor;
+    dev_y_coors[pillar_ind] = y_coor;
 
-
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 0] 
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 0] 
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 0]; 
   
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 1]  
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 1]  
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 1];
   
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 2]  
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 2]  
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 2];
   
-    // dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 3]  
+    // dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 3]  
     // =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 3];
     
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 3]  =  0.0f;
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 3]  =  0.0f;
 
-    // dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 4]  
+    // dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 4]  
     // =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 4];
   
-    // dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 4]  =  0.0f;
+    // dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 4]  =  0.0f;
     //   f_cluster = voxel_features[:, :, :3] - points_mean
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 4]  
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 4]  
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 0] - dev_points_mean[ith_pillar * 3 + 0 ];
 
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 5] 
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 5] 
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 1] - dev_points_mean[ith_pillar * 3 + 1 ];
   
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 6]  
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 6]  
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 2] - dev_points_mean[ith_pillar * 3 + 2 ];
 
     // f_center[:, :, 0] = voxel_features[:, :, 0] - (coords[:, 3].to(voxel_features.dtype).unsqueeze(1) * self.voxel_x + self.x_offset)
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 7]  
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 7]  
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 0] - (dev_pillar_coors[ith_pillar * 4 + 3] * pillar_x_size + (pillar_x_size/2 + min_x_range));
   
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 8]  
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 8]  
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 1] - (dev_pillar_coors[ith_pillar * 4 + 2] * pillar_y_size + (pillar_y_size/2 + min_y_range));
   
-    dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 9] 
+    dev_pfe_gather_feature_[pillar_ind * max_num_points_per_pillar * num_gather_feature + ith_point * num_gather_feature + 9] 
     =  dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar * num_point_feature + ith_point * num_point_feature + 2] - (dev_pillar_coors[ith_pillar * 4 + 1] * pillar_z_size + (pillar_z_size/2 + min_z_range));
 
 }
-
-
-
 
 PreprocessPointsCuda::PreprocessPointsCuda(
     const int num_threads, const int max_num_pillars,
@@ -333,10 +339,11 @@ PreprocessPointsCuda::PreprocessPointsCuda(
       min_x_range_(min_x_range),
       min_y_range_(min_y_range),
       min_z_range_(min_z_range) {
-    
     GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_pillar_point_feature_in_coors_),
         grid_y_size_ * grid_x_size_ * max_num_points_per_pillar_ *  num_point_feature_ * sizeof(float)));
     GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_pillar_count_histo_),
+        grid_y_size_ * grid_x_size_ * sizeof(int)));
+    GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&coor_to_voxelidx_),
         grid_y_size_ * grid_x_size_ * sizeof(int)));
     GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_counter_), sizeof(int)));
     GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_pillar_count_), sizeof(int)));    
@@ -346,6 +353,7 @@ PreprocessPointsCuda::PreprocessPointsCuda(
 PreprocessPointsCuda::~PreprocessPointsCuda() {
     GPU_CHECK(cudaFree(dev_pillar_point_feature_in_coors_));
     GPU_CHECK(cudaFree(dev_pillar_count_histo_));
+    GPU_CHECK(cudaFree(coor_to_voxelidx_));
     GPU_CHECK(cudaFree(dev_counter_));
     GPU_CHECK(cudaFree(dev_pillar_count_));
     GPU_CHECK(cudaFree(dev_points_mean_));
@@ -356,17 +364,19 @@ Input : dev_points, in_num_points
 Output : dev_pillar_point_feature_in_coors_ , dev_pillar_count_histo_
 */
 void PreprocessPointsCuda::DoPreprocessPointsCuda(
-    const float* dev_points, const int in_num_points, 
+    const float* dev_points, const int in_num_points, const int* dev_coor_to_voxelidx,
     int* dev_x_coors,int* dev_y_coors, 
     float* dev_num_points_per_pillar,
     float* dev_pillar_point_feature, float* dev_pillar_coors,
     int* dev_sparse_pillar_map, int* host_pillar_count , float* dev_pfe_gather_feature) {
+    
     // initialize paraments
     GPU_CHECK(cudaMemset(dev_pillar_point_feature_in_coors_, 0 , grid_y_size_ * grid_x_size_ * max_num_points_per_pillar_ *  num_point_feature_ * sizeof(float)));
     GPU_CHECK(cudaMemset(dev_pillar_count_histo_, 0 , grid_y_size_ * grid_x_size_ * sizeof(int)));
     GPU_CHECK(cudaMemset(dev_counter_, 0, sizeof(int)));
     GPU_CHECK(cudaMemset(dev_pillar_count_, 0, sizeof(int)));
     GPU_CHECK(cudaMemset(dev_points_mean_, 0,  max_num_pillars_ * 3 * sizeof(float)));
+
     int num_block = DIVUP(in_num_points , num_threads_);
     make_pillar_histo_kernel<<<num_block , num_threads_>>>(
         dev_points, dev_pillar_point_feature_in_coors_, dev_pillar_count_histo_,
@@ -405,10 +415,10 @@ void PreprocessPointsCuda::DoPreprocessPointsCuda(
         max_num_pillars_ , max_num_points_per_pillar_);
 
     gather_point_feature_kernel<<<max_num_pillars_, max_num_points_per_pillar_>>>(
-      max_num_pillars_,max_num_points_per_pillar_,num_point_feature_,
+      dev_coor_to_voxelidx,max_num_pillars_,max_num_points_per_pillar_,num_point_feature_,
       min_x_range_, min_y_range_, min_z_range_,
-      pillar_x_size_, pillar_y_size_, pillar_z_size_, 
+      pillar_x_size_, pillar_y_size_, pillar_z_size_, grid_x_size_,
       dev_pillar_point_feature, dev_num_points_per_pillar, dev_pillar_coors,
       dev_points_mean_,
-      dev_pfe_gather_feature);
+      dev_pfe_gather_feature, dev_x_coors, dev_y_coors);
 }

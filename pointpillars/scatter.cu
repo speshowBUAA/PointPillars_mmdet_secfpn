@@ -57,7 +57,7 @@ int i_pillar = blockIdx.x;
 int i_feature = threadIdx.x;
 int x_ind = x_coors[i_pillar];
 int y_ind = y_coors[i_pillar];
-float feature = pfe_output[i_pillar * 64 + i_feature];
+float feature = pfe_output[i_pillar * 22 + i_feature];
 scattered_feature[i_feature * grid_y_size * grid_x_size +
 y_ind * grid_x_size + x_ind] = feature;
 }

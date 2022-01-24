@@ -157,6 +157,9 @@ class PointPillars {
     int kNmsPreMaxsize;
     int kNmsPostMaxsize;
 
+    int* coor_to_voxelidx;
+    int voxel_num_;
+
     int host_pillar_count_[1];
 
     int* dev_x_coors_;
