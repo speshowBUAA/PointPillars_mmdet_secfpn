@@ -76,12 +76,16 @@ def test():
     # print(cloud_out.shape)
     # draw_clouds(cloud)
 
-    path = "../test/testdata/pts.bin"
+    path = "../test/testdata/1642667641967405863.bin"
     cloud = np.fromfile(path, dtype=np.float32, count=-1)
-    cloud = cloud.reshape([-1,4])
+    cloud = cloud.reshape([-1, 5])[:, :4]
     print(cloud.shape)
     draw_clouds(cloud)
 
+    # path = "../test/testdata/1606813508.307215400.pcd"
+    # pcd = pcl.load(path).to_array()
+    # print(pcd.shape)
+
 if __name__ == "__main__":
-    main()
-    # test()
+    # main()
+    test()
