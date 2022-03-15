@@ -110,8 +110,6 @@ class Logger : public nvinfer1::ILogger {
   Severity reportable_severity;
 };
 
-
-
 class PointPillars {
  private:
     // initialize in initializer list
@@ -192,7 +190,7 @@ class PointPillars {
     nvinfer1::ICudaEngine* backbone_engine_;
     nvinfer1::IExecutionContext* pfe_context_;
     nvinfer1::IExecutionContext* backbone_context_;
-
+    
     /**
      * @brief Memory allocation for device memory
      * @details Called in the constructor

@@ -6,6 +6,7 @@
 // headers in 3rd-part
 #include "../pointpillars/pointpillars.h"
 #include "gtest/gtest.h"
+#include <chrono>
 using namespace std;
 
 int Txt2Arrary( float* &points_array , string file_name , int num_feature = 4)
@@ -131,9 +132,10 @@ TEST(PointPillars, __build_model__) {
   // in_num_points = Txt2Arrary(points_array,file_name,5);
   in_num_points = Bin2Arrary(points_array,file_name,5);
   load_anchors(anchor_data, anchor_file);
-  for (int _ = 0 ; _ < 4 ; _++)
+  // for (int _ = 0 ; _ < 4 ; _++)
+  for (int _ = 0 ; _ < 4 ;)
   {
-
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     std::vector<float> out_detections;
     std::vector<int> out_labels;
     std::vector<float> out_scores;
@@ -147,5 +149,7 @@ TEST(PointPillars, __build_model__) {
     std::string boxes_file_name = config["OutputFile"].as<std::string>();
     Boxes2Txt(out_detections , boxes_file_name );
     EXPECT_EQ(num_objects,228);
+    std::chrono::duration<double> time_elapse = std::chrono::steady_clock::now() - start;
+    printf("%.2lf ms\n", std::chrono::duration_cast<std::chrono::nanoseconds>(time_elapse).count() * 1.0e-6);
   }
 };

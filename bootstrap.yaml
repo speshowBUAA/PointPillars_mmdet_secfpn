@@ -6,14 +6,14 @@ UseOnnx: False
 PfeOnnx: /home/jz/yxb/PointPillars_mmdet_secfpn/model/mmdet/pts_pfe.onnx
 BackboneOnnx: /home/jz/yxb/PointPillars_mmdet_secfpn/model/mmdet/pts_backbone_with_anchors.onnx
 
-PfeTrt: /home/jz/yxb/PointPillars_mmdet_secfpn/model/mmdet/pts_pfe_prune.trt
+PfeTrt: /home/jz/yxb/PointPillars_mmdet_secfpn/model/mmdet/pts_pfe_prune_finetune.trt
 # BackboneTrt: /home/jz/yxb/PointPillars_mmdet_secfpn/model/mmdet/pts_backbone_with_anchors.trt
-BackboneTrt: /home/jz/yxb/PointPillars_mmdet_secfpn/model/mmdet/pts_backbone_prune.trt
+BackboneTrt: /home/jz/yxb/PointPillars_mmdet_secfpn/model/mmdet/pts_backbone_prune_finetune.trt
 
 ModelConfig: ../pointpillars/cfgs/hv_pointpillars_secfpn_sbn-all_4x8_2x_nus-3d.yaml
 AnchorFile: ../pointpillars/cfgs/generate_anchors_200x200.txt
 
-InputFile: ../test/testdata/1606813517797756000.bin
+InputFile: ../test/testdata/1645179542771259609.bin
 # InputFile: ../test/testdata/000000.bin
 # OutputFile: ../test/testdata/boxes_onnx.txt
 OutputFile: ../test/testdata/boxes.txt

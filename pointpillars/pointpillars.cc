@@ -54,6 +54,7 @@
 
 // #define ANCHOR_NUM 560000   // feature_map 400x400
 #define ANCHOR_NUM 140000   // feature_map 200x200
+
 void PointPillars::InitParams()
 {
     YAML::Node params = YAML::LoadFile(pp_config_);
@@ -85,8 +86,6 @@ void PointPillars::InitParams()
     kGridXSize = static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize); //400 200
     kGridYSize = static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize); //400 200
     kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize); //1
-    std::cout << "kGridXSize: " << kGridXSize << std::endl;
-    std::cout << "kGridYSize: " << kGridYSize << std::endl;
     kRpnInputSize = 22 * kGridYSize * kGridXSize;
 }
 
@@ -135,7 +134,6 @@ PointPillars::PointPillars(const float score_threshold,
                           kNumOutputBoxFeature));  /*kNumOutputBoxFeature*/
     
 }
-
 
 void PointPillars::DeviceMemoryMalloc() {
     // for pillars 
@@ -213,7 +211,6 @@ PointPillars::~PointPillars() {
     delete[] host_box_;
     delete[] host_score_;
     delete[] host_filtered_count_;
-
 }
 
 
@@ -459,23 +456,9 @@ void PointPillars::DoInference(const float* in_points_array,
     auto postprocess_end = std::chrono::high_resolution_clock::now();
 
     // release the stream and the buffers
-    std::chrono::duration<double> load_cost = load_end - load_start;
-    std::chrono::duration<double> preprocess_cost = preprocess_end - preprocess_start;
-    std::chrono::duration<double> pfe_cost = pfe_end - pfe_start;
-    std::chrono::duration<double> scatter_cost = scatter_end - scatter_start;
-    std::chrono::duration<double> backbone_cost = backbone_end - backbone_start;
-    std::chrono::duration<double> postprocess_cost = postprocess_end - postprocess_start;
 
-    std::chrono::duration<double> pointpillars_cost = postprocess_end - preprocess_start;
-    std::cout << "------------------------------------" << std::endl;
-    std::cout << setiosflags(ios::left)  << setw(14) << "Module" << setw(12)  << "Time"  << resetiosflags(ios::left) << std::endl;
-    std::cout << "------------------------------------" << std::endl;
-    std::string Modules[] = {"Load", "Preprocess" , "Pfe" , "Scatter" , "Backbone" , "Postprocess" , "Summary"};
-    double Times[] = {load_cost.count() , preprocess_cost.count() , pfe_cost.count() , scatter_cost.count() , backbone_cost.count() , postprocess_cost.count() , pointpillars_cost.count()}; 
-
-    for (int i =0 ; i < 7 ; ++i) {
-        std::cout << setiosflags(ios::left) << setw(14) << Modules[i]  << setw(8)  << Times[i] * 1000 << " ms" << resetiosflags(ios::left) << std::endl;
-    }
-    std::cout << "------------------------------------" << std::endl;
     cudaStreamDestroy(stream);
+    GPU_CHECK(cudaFree(dev_points));
+    GPU_CHECK(cudaFree(dev_anchors));
+    GPU_CHECK(cudaFree(dev_coor_to_voxelidx));
 }
